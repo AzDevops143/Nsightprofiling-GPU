@@ -106,7 +106,7 @@ Nsightprofiling-GPU/
 
 This repository uses a multi-stage Docker build with the official NGC image:
 - **Builder Stage:** `nvidia/cuda:12.8.0-devel-ubuntu22.04` (compiles with `-O3 -lineinfo -lnvToolsExt -cudart static`).
-- **Runner Stage:** `nvcr.io/nvidia/devtools/nsight-systems-cli:latest` (provides official `nsys` profiler environment).
+- **Runner Stage:** `nvcr.io/nvidia/devtools/nsight-systems-cli:2025.6.1-ubuntu22.04` (provides official `nsys` profiler environment).
 
 ### 1. Build the Docker Image
 ```bash

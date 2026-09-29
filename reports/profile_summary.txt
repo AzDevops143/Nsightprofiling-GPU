@@ -1,6 +1,6 @@
 ==================================================================
 NVIDIA NSIGHT SYSTEMS (nsys) PROFILING SUMMARY REPORT
-Container: nvcr.io/nvidia/devtools/nsight-systems-cli:latest
+Container: nvcr.io/nvidia/devtools/nsight-systems-cli:2025.6.1-ubuntu22.04
 Application: 2D Heat Diffusion Benchmark (CUDA C++)
 Target Grid: 256x256 (65,536 elements), Max Iterations: 1,000
 ==================================================================

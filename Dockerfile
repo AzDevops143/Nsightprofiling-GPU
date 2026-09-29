@@ -32,7 +32,8 @@ RUN nvcc -O3 -lineinfo -std=c++17 \
     heat_diffusion.cu -o heat_diffusion
 
 # Stage 2: Official NVIDIA NGC Nsight Systems CLI Container
-FROM nvcr.io/nvidia/devtools/nsight-systems-cli:latest
+ARG NSYS_TAG=2025.6.1-ubuntu22.04
+FROM nvcr.io/nvidia/devtools/nsight-systems-cli:${NSYS_TAG}
 
 LABEL maintainer="AzDevops143"
 LABEL description="Official NVIDIA Nsight Systems CLI Container for CUDA Heat Diffusion Profiling"

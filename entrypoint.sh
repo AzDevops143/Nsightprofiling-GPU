@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -e
 
+# Support direct passthrough commands like "bash", "sh", "nsys", or "--version"
+if [ "$1" = "nsys" ] || [ "$1" = "bash" ] || [ "$1" = "sh" ]; then
+    exec "$@"
+fi
+
+if [ "$1" = "--version" ] || [ "$1" = "-v" ] || [ "$1" = "version" ]; then
+    echo "=================================================================="
+    echo "NVIDIA Nsight Systems CLI Profiler Container"
+    echo "=================================================================="
+    nsys --version
+    exit 0
+fi
+
 GRID_N="${1:-256}"
 EPS="${2:-1e-4}"
 MAX_ITER="${3:-1000}"
@@ -53,7 +66,7 @@ if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
     ls -lh "${OUT_DIR}"
 else
     echo "[NOTICE] No physical NVIDIA GPU device detected in current container environment."
-    echo "         (If running in Docker, remember to pass '--gpus all --privileged')."
+    echo "         (If running in Docker, pass '--gpus all --privileged')."
     echo ""
     echo "-> Verifying binary compilation and Nsight Systems CLI tools..."
     nsys --version
