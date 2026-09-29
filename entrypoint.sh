@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-# Support direct passthrough commands like "bash", "sh", "nsys", or "--version"
-if [ "$1" = "nsys" ] || [ "$1" = "bash" ] || [ "$1" = "sh" ]; then
+# Support direct passthrough commands like "bash", "sh", "nsys", "ncu", or "--version"
+if [ "$1" = "nsys" ] || [ "$1" = "ncu" ] || [ "$1" = "bash" ] || [ "$1" = "sh" ]; then
     exec "$@"
 fi
 
@@ -37,33 +37,20 @@ if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
     echo "-> 1. Capturing trace (CUDA runtime, NVTX annotations, OS runtime)..."
     nsys profile \
         -t cuda,nvtx,osrt \
-        --stats=true \
         --force-overwrite=true \
         -o "${REPORT_BASE}" \
         /workspace/heat_diffusion "${GRID_N}" "${EPS}" "${MAX_ITER}"
 
     echo ""
-    echo "-> 2. Exporting CUDA Kernel Execution Summary..."
-    nsys stats --report cuda_gpu_kern_sum --format table "${REPORT_BASE}.nsys-rep" > "${OUT_DIR}/cuda_gpu_kern_sum.txt"
-    cat "${OUT_DIR}/cuda_gpu_kern_sum.txt"
+    echo "-> 2. Capturing Nsight Compute kernel report..."
+    ncu --set basic \
+        --force-overwrite \
+        -o "${REPORT_BASE}" \
+        /workspace/heat_diffusion "${GRID_N}" "${EPS}" 4
 
     echo ""
-    echo "-> 3. Exporting CUDA API Calls Summary..."
-    nsys stats --report cuda_api_sum --format table "${REPORT_BASE}.nsys-rep" > "${OUT_DIR}/cuda_api_sum.txt"
-    cat "${OUT_DIR}/cuda_api_sum.txt"
-
-    echo ""
-    echo "-> 4. Exporting GPU Memory Operations Summary..."
-    nsys stats --report cuda_gpu_mem_time_sum,cuda_gpu_mem_size_sum --format table "${REPORT_BASE}.nsys-rep" > "${OUT_DIR}/cuda_mem_sum.txt"
-    cat "${OUT_DIR}/cuda_mem_sum.txt"
-
-    echo ""
-    echo "-> 5. Exporting SQLite Database for SQL querying..."
-    nsys export --type sqlite -o "${REPORT_BASE}.sqlite" "${REPORT_BASE}.nsys-rep"
-
-    echo ""
-    echo "[SUCCESS] Profiling completed! All artifacts generated in ${OUT_DIR}:"
-    ls -lh "${OUT_DIR}"
+    echo "[SUCCESS] Native Nsight reports generated in ${OUT_DIR}:"
+    find "${OUT_DIR}" -maxdepth 1 -type f \( -name '*.nsys-rep' -o -name '*.ncu-rep' \) -printf '%f\n'
 else
     echo "[NOTICE] No physical NVIDIA GPU device detected in current container environment."
     echo "         (If running in Docker, pass '--gpus all --privileged')."

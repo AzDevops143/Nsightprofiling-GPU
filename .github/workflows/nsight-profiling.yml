@@ -50,10 +50,13 @@ jobs:
           echo "Building container from official NVIDIA NGC Nsight Systems CLI base..."
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
 
-      - name: Verify Container & Nsight Systems CLI
+      - name: Verify Nsight Systems and Compute CLIs
         run: |
           echo "Verifying Nsight Systems CLI inside container..."
           docker run --rm --entrypoint nsys \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --version
+          echo "Verifying Nsight Compute CLI inside container..."
+          docker run --rm --entrypoint ncu \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --version
 
       - name: Run Profiling (or verify runner capability)

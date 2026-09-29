@@ -4,7 +4,7 @@
 [![Official NGC Container](https://img.shields.io/badge/NVIDIA%20NGC-nsight--systems--cli-76B900?logo=nvidia)](https://catalog.ngc.nvidia.com/orgs/nvidia/devtools/containers/nsight-systems-cli)
 [![CUDA](https://img.shields.io/badge/CUDA-12.8-green?logo=nvidia)](https://developer.nvidia.com/cuda-toolkit)
 
-Production-grade CUDA performance profiling workflow powered by the **official NVIDIA NGC Nsight Systems CLI container** ([`nvcr.io/nvidia/devtools/nsight-systems-cli`](https://catalog.ngc.nvidia.com/orgs/nvidia/devtools/containers/nsight-systems-cli)).
+Production-grade CUDA performance profiling workflow using **NVIDIA Nsight Systems** and **Nsight Compute**. The container uses the official NGC Nsight Systems CLI image and NVIDIA's Nsight Compute CLI package.
 
 This repository profiles and benchmarks a 2D Heat Diffusion 5-point Jacobi Stencil comparing **Global Memory** against **Shared Memory Tiled Stencil with Halo Loading**, instrumented with **NVTX (NVIDIA Tools Extension)** range markers.
 
@@ -89,13 +89,8 @@ Nsightprofiling-GPU/
 ├── entrypoint.sh                  # Container entrypoint for automated trace capture
 ├── heat_diffusion.cu              # CUDA C++ source instrumented with NVTX markers
 ├── reports/                       # Pre-packaged Nsight profiling reports & traces
-│   ├── NSIGHT_PROFILING_REPORT.md # Comprehensive analysis & architectural insights
-│   ├── profile_summary.txt        # Full terminal tables
-│   ├── cuda_gpu_kern_sum.txt      # Kernel execution table
-│   ├── cuda_api_sum.txt           # CUDA API call table
-│   ├── cuda_mem_sum.txt           # Memory transfer table
-│   ├── heat_diffusion_profile.nsys-rep # Nsight Systems GUI trace file
-│   └── heat_diffusion_profile.sqlite   # SQLite database export
+│   ├── heat_diffusion_profile.nsys-rep # Native Nsight Systems report
+│   └── heat_diffusion_profile.ncu-rep  # Native Nsight Compute report
 ├── .gitignore
 └── README.md
 ```
@@ -106,7 +101,7 @@ Nsightprofiling-GPU/
 
 This repository uses a multi-stage Docker build with the official NGC image:
 - **Builder Stage:** `nvidia/cuda:12.8.0-devel-ubuntu22.04` (compiles with `-O3 -lineinfo -lnvToolsExt -cudart static`).
-- **Runner Stage:** `nvcr.io/nvidia/devtools/nsight-systems-cli:2025.6.1-ubuntu22.04` (provides official `nsys` profiler environment).
+- **Runner Stage:** `nvcr.io/nvidia/devtools/nsight-systems-cli:2025.6.1-ubuntu22.04` with Nsight Compute CLI 2026.3.0 installed from NVIDIA's Ubuntu repository.
 
 ### 1. Build the Docker Image
 ```bash

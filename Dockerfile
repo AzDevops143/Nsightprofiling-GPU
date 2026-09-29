@@ -36,6 +36,19 @@ RUN nvcc -O3 -lineinfo -std=c++17 \
 # Stage 2: Official NVIDIA NGC Nsight Systems CLI Container
 FROM nvcr.io/nvidia/devtools/nsight-systems-cli:${NSYS_TAG}
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        && curl -fsSL \
+            https://developer.download.nvidia.com/devtools/repos/ubuntu2204/amd64/nsight-compute-2026.3.0_2026.3.0.13-1_amd64.deb \
+            -o /tmp/nsight-compute.deb \
+        && echo "84feeebbe340239f3d33a9900279cacbb33a6ceb8780f65897574e0c2add9564  /tmp/nsight-compute.deb" | sha256sum --check \
+        && apt-get install -y --no-install-recommends /tmp/nsight-compute.deb \
+        && rm -f /tmp/nsight-compute.deb \
+        && rm -rf /var/lib/apt/lists/*
+
+    ENV PATH="/opt/nvidia/nsight-compute/2026.3.0:${PATH}"
+
 LABEL maintainer="AzDevops143"
 LABEL description="Official NVIDIA Nsight Systems CLI Container for CUDA Heat Diffusion Profiling"
 LABEL org.opencontainers.image.source="https://github.com/AzDevops143/Nsightprofiling-GPU"
