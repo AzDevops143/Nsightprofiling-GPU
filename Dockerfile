@@ -5,6 +5,8 @@
 # Reference: https://catalog.ngc.nvidia.com/orgs/nvidia/devtools/containers/nsight-systems-cli
 # ==============================================================================
 
+ARG NSYS_TAG=2025.6.1-ubuntu22.04
+
 # Stage 1: Build the CUDA application
 FROM nvidia/cuda:12.8.0-devel-ubuntu22.04 AS builder
 
@@ -32,7 +34,6 @@ RUN nvcc -O3 -lineinfo -std=c++17 \
     heat_diffusion.cu -o heat_diffusion
 
 # Stage 2: Official NVIDIA NGC Nsight Systems CLI Container
-ARG NSYS_TAG=2025.6.1-ubuntu22.04
 FROM nvcr.io/nvidia/devtools/nsight-systems-cli:${NSYS_TAG}
 
 LABEL maintainer="AzDevops143"
