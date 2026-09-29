@@ -1,33 +1,38 @@
-NVCC := nvcc
-NVCC_FLAGS := -O3 -std=c++17 \
-    -gencode arch=compute_75,code=sm_75 \
-    -gencode arch=compute_80,code=sm_80 \
-    -gencode arch=compute_86,code=sm_86 \
-    -gencode arch=compute_89,code=sm_89 \
-    -gencode arch=compute_90,code=sm_90 \
-    -gencode arch=compute_90,code=compute_90
+SHELL := /bin/bash
+IMAGE_NAME := ghcr.io/azdevops143/nsightprofiling-gpu:latest
+REPORTS_DIR := $(shell pwd)/reports
 
-TARGET := heat_diffusion
-SRC := heat_diffusion.cu
+.PHONY: all build profile stats clean help
 
-IMAGE_NAME := gpu-assignment
-TAG := latest
+all: build profile
 
-.PHONY: all clean run docker-build docker-run
+help:
+	@echo "=================================================================="
+	@echo "NVIDIA Nsight Systems Profiling Automation"
+	@echo "=================================================================="
+	@echo "Targets:"
+	@echo "  make build    : Build the multi-stage Docker image with NGC Nsight"
+	@echo "  make profile  : Run nsys profile inside container on GPU"
+	@echo "  make stats    : Print summary tables from generated .nsys-rep"
+	@echo "  make clean    : Remove local build artifacts and reports"
+	@echo "=================================================================="
 
-all: $(TARGET)
+build:
+	docker build -t $(IMAGE_NAME) .
 
-$(TARGET): $(SRC)
-	$(NVCC) $(NVCC_FLAGS) $< -o $@
+profile:
+	mkdir -p $(REPORTS_DIR)
+	docker run --gpus all --privileged --ipc=host --rm \
+		-v $(REPORTS_DIR):/reports \
+		$(IMAGE_NAME) 256 1e-4 1000
 
-run: $(TARGET)
-	./$(TARGET) 256 1e-4 2000000
-
-docker-build:
-	docker build -t $(IMAGE_NAME):$(TAG) .
-
-docker-run:
-	docker run --gpus all --rm -it $(IMAGE_NAME):$(TAG)
+stats:
+	@if [ -f "$(REPORTS_DIR)/heat_diffusion_profile.nsys-rep" ]; then \
+		docker run --rm -v $(REPORTS_DIR):/reports $(IMAGE_NAME) \
+			nsys stats --report cuda_gpu_kern_sum,cuda_api_sum /reports/heat_diffusion_profile.nsys-rep; \
+	else \
+		echo "Report file not found. Run 'make profile' first."; \
+	fi
 
 clean:
-	rm -f $(TARGET) *.csv
+	rm -rf $(REPORTS_DIR)/*.nsys-rep $(REPORTS_DIR)/*.sqlite

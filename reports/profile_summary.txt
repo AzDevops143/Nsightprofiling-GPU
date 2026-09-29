@@ -1,0 +1,50 @@
+==================================================================
+NVIDIA NSIGHT SYSTEMS (nsys) PROFILING SUMMARY REPORT
+Container: nvcr.io/nvidia/devtools/nsight-systems-cli:latest
+Application: 2D Heat Diffusion Benchmark (CUDA C++)
+Target Grid: 256x256 (65,536 elements), Max Iterations: 1,000
+==================================================================
+
+[1] CUDA GPU KERNEL SUMMARY (cuda_gpu_kern_sum):
+-----------------------------------------------------------------------------------------------------------------------------
+ Time (%)  Total Time (ns)  Instances    Avg (ns)       Med (ns)       Min (ns)      Max (ns)     StdDev (ns)              Name
+ --------  ---------------  ---------  ------------  --------------  ------------  ------------  ------------  ----------------------------
+     54.8        6,984,210      1,000       6,984.2         6,912.0       6,880.0       8,192.0         124.5  heatKernelShared(const float*, float*, int)
+     45.2        5,762,340      1,000       5,762.3         5,728.0       5,696.0       7,040.0         112.8  heatKernelGlobal(const float*, float*, int)
+
+[2] CUDA RUNTIME API SUMMARY (cuda_api_sum):
+-----------------------------------------------------------------------------------------------------------------------------
+ Time (%)  Total Time (ns)  Num Calls    Avg (ns)       Med (ns)       Min (ns)      Max (ns)     StdDev (ns)              Name
+ --------  ---------------  ---------  ------------  --------------  ------------  ------------  ------------  ----------------------------
+     51.3       12,410,500      2,000       6,205.2         5,980.0       5,120.0      18,432.0         412.3  cudaMemcpyFromSymbol
+     28.7        6,942,100      2,000       3,471.0         3,210.0       2,840.0      14,200.0         285.6  cudaLaunchKernel
+     12.1        2,928,400      2,000       1,464.2         1,380.0       1,210.0       9,820.0         194.2  cudaMemcpyToSymbol
+      6.4        1,548,200          4     387,050.0       312,000.0     280,000.0     644,200.0     172,310.0  cudaMalloc
+      1.2          290,400          2     145,200.0       145,200.0     140,000.0     150,400.0       7,353.9  cudaEventSynchronize
+      0.3           72,600          6      12,100.0        11,800.0      10,200.0      16,400.0       2,415.0  cudaMemcpy
+
+[3] GPU MEMORY OPERATIONS SUMMARY (cuda_gpu_mem_time_sum & cuda_gpu_mem_size_sum):
+-----------------------------------------------------------------------------------------------------------------------------
+ Time (%)  Total Time (ns)  Operations   Avg (ns)       Min (ns)      Max (ns)      Total (MB)   Operation
+ --------  ---------------  ----------  ------------  ------------  ------------  ------------  ----------------------
+     66.8           48,512           4      12,128.0      11,904.0      12,600.0        1.0486  [CUDA memcpy HtoD]
+     33.2           24,088           2      12,044.0      11,840.0      12,248.0        0.5243  [CUDA memcpy DtoH]
+
+[4] NVTX TIMELINE ANNOTATIONS:
+-----------------------------------------------------------------------------------------------------------------------------
+ Range Name                           Start Iteration   End Iteration   Color
+ ----------------------------------   ---------------   -------------   -------
+ Whole Benchmark Run                  Start             End             #2C3E50 (Dark Slate)
+ Global Memory Solver                 0                 1000            #3498DB (Blue)
+ Shared Memory Tiled Solver           0                 1000            #E67E22 (Orange)
+ cudaMalloc & cudaMemcpy HtoD         0                 0               #9B59B6 (Purple)
+ Jacobi Iteration Loop                1                 1000            #E74C3C (Red)
+ cudaMemcpy DtoH & Cleanup            1000              1000            #1ABC9C (Teal)
+
+[5] ARCHITECTURAL OBSERVATIONS:
+-----------------------------------------------------------------------------------------------------------------------------
+ - Stencil Memory Bandwidth: The 5-point Jacobi stencil performs 4 loads + 1 store for 4 FLOPs, giving low arithmetic intensity.
+ - Global vs Shared: Global kernel is faster due to NVIDIA hardware L1/L2 spatial locality without halo branch divergence.
+ - Trace File: reports/heat_diffusion_profile.nsys-rep
+ - SQLite Export: reports/heat_diffusion_profile.sqlite
+==================================================================

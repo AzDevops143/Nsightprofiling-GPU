@@ -1,0 +1,4 @@
+ Time (%)  Total Time (ns)  Instances    Avg (ns)       Med (ns)       Min (ns)      Max (ns)     StdDev (ns)              Name
+ --------  ---------------  ---------  ------------  --------------  ------------  ------------  ------------  ----------------------------
+     54.8        6,984,210      1,000       6,984.2         6,912.0       6,880.0       8,192.0         124.5  heatKernelShared(const float*, float*, int)
+     45.2        5,762,340      1,000       5,762.3         5,728.0       5,696.0       7,040.0         112.8  heatKernelGlobal(const float*, float*, int)

@@ -1,16 +1,23 @@
+# Compiled binaries and objects
 heat_diffusion
 *.o
 *.out
 *.exe
 
+# Root temporary files
 /*.csv
 /*.png
 
-!artifacts/**
+# Explicitly track all reports and profiling traces
+!reports/**
 
+# Python & editor caches
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+.vscode/
+.idea/
 
+# OS files
 .DS_Store
 Thumbs.db

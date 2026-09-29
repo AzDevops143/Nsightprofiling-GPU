@@ -5,6 +5,29 @@
 #include <string>
 #include <cuda_runtime.h>
 
+#define USE_NVTX 1
+#ifdef USE_NVTX
+#include <nvtx3/nvToolsExt.h>
+
+inline void nvtx_push(const char* name, uint32_t color = 0xFF2ECC71) {
+    nvtxEventAttributes_t eventAttrib = {0};
+    eventAttrib.version = NVTX_VERSION;
+    eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    eventAttrib.colorType = NVTX_COLOR_ARGB;
+    eventAttrib.color = color;
+    eventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII;
+    eventAttrib.message.ascii = name;
+    nvtxRangePushEx(&eventAttrib);
+}
+
+inline void nvtx_pop() {
+    nvtxRangePop();
+}
+#else
+inline void nvtx_push(const char*, uint32_t = 0) {}
+inline void nvtx_pop() {}
+#endif
+
 #define BLOCK 16
 #define GLOBAL_MODE 0
 #define SHARED_MODE 1
@@ -20,7 +43,10 @@
 
 __device__ float g_maxdiff;
 
-__global__ void heatKernelGlobal(const float* T, float* Tnew, int N)
+// ----------------------------------------------------------------------------
+// Global-Memory 5-Point Jacobi Stencil Kernel
+// ----------------------------------------------------------------------------
+__global__ void heatKernelGlobal(const float* __restrict__ T, float* __restrict__ Tnew, int N)
 {
     extern __shared__ float sdata[];
     int col = blockIdx.x * blockDim.x + threadIdx.x + 1;
@@ -42,6 +68,7 @@ __global__ void heatKernelGlobal(const float* T, float* Tnew, int N)
     sdata[tid] = diff;
     __syncthreads();
 
+    // In-block tree reduction for maximum difference
     for (int s = (blockDim.x * blockDim.y) / 2; s > 0; s >>= 1) {
         if (tid < s) sdata[tid] = fmaxf(sdata[tid], sdata[tid + s]);
         __syncthreads();
@@ -50,7 +77,10 @@ __global__ void heatKernelGlobal(const float* T, float* Tnew, int N)
     if (tid == 0) atomicMax((int*)&g_maxdiff, __float_as_int(sdata[0]));
 }
 
-__global__ void heatKernelShared(const float* T, float* Tnew, int N)
+// ----------------------------------------------------------------------------
+// Shared-Memory Tiled 5-Point Jacobi Stencil Kernel with Halo Boundaries
+// ----------------------------------------------------------------------------
+__global__ void heatKernelShared(const float* __restrict__ T, float* __restrict__ Tnew, int N)
 {
     extern __shared__ float smemAll[];
     int tileDim = blockDim.x + 2;
@@ -65,8 +95,10 @@ __global__ void heatKernelShared(const float* T, float* Tnew, int N)
     int colc = min(col, N - 1);
     int rowc = min(row, N - 1);
 
+    // Load center cell
     tile[ly * tileDim + lx] = T[rowc * N + colc];
 
+    // Load halo cells (left, right, top, bottom)
     if (threadIdx.x == 0) {
         int leftCol = max(col - 1, 0);
         tile[ly * tileDim + 0] = T[rowc * N + leftCol];
@@ -104,6 +136,7 @@ __global__ void heatKernelShared(const float* T, float* Tnew, int N)
     sdata[tid] = diff;
     __syncthreads();
 
+    // In-block tree reduction
     for (int s = (blockDim.x * blockDim.y) / 2; s > 0; s >>= 1) {
         if (tid < s) sdata[tid] = fmaxf(sdata[tid], sdata[tid + s]);
         __syncthreads();
@@ -134,19 +167,26 @@ void initGrid(std::vector<float>& g, int N, float topT, float bottomT, float lef
 }
 
 SimResult runSimulation(int N, float tol, long long maxIter, int mode,
-                         float topT, float bottomT, float leftT, float rightT, float initTemp,
-                         bool dump, const char* fname)
+                         float topT, float bottomT, float leftT, float rightT, float initTemp)
 {
+    const char* modeName = (mode == GLOBAL_MODE) ? "Global Memory Solver" : "Shared Memory Tiled Solver";
+    uint32_t modeColor = (mode == GLOBAL_MODE) ? 0xFF3498DB : 0xFFE67E22; // Blue vs Orange
+
+    nvtx_push(modeName, modeColor);
+
     SimResult result;
     std::vector<float> h_init;
     initGrid(h_init, N, topT, bottomT, leftT, rightT, initTemp);
 
     float *d_A, *d_B;
     size_t bytes = (size_t)N * N * sizeof(float);
+    
+    nvtx_push("cudaMalloc & cudaMemcpy HtoD", 0xFF9B59B6);
     CUDA_CHECK(cudaMalloc(&d_A, bytes));
     CUDA_CHECK(cudaMalloc(&d_B, bytes));
     CUDA_CHECK(cudaMemcpy(d_A, h_init.data(), bytes, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_B, h_init.data(), bytes, cudaMemcpyHostToDevice));
+    nvtx_pop();
 
     dim3 block(BLOCK, BLOCK);
     int interior = N - 2;
@@ -168,6 +208,7 @@ SimResult runSimulation(int N, float tol, long long maxIter, int mode,
 
     CUDA_CHECK(cudaEventRecord(start));
 
+    nvtx_push("Jacobi Iteration Loop", 0xFFE74C3C);
     while (diffVal > tol && iter < maxIter) {
         CUDA_CHECK(cudaMemcpyToSymbol(g_maxdiff, &zero, sizeof(float)));
 
@@ -186,6 +227,7 @@ SimResult runSimulation(int N, float tol, long long maxIter, int mode,
 
         iter++;
     }
+    nvtx_pop(); // End Jacobi Iteration Loop
 
     CUDA_CHECK(cudaEventRecord(stop));
     CUDA_CHECK(cudaEventSynchronize(stop));
@@ -197,36 +239,30 @@ SimResult runSimulation(int N, float tol, long long maxIter, int mode,
     result.time_ms = ms;
     result.converged = (diffVal <= tol);
     result.final_max_diff = diffVal;
-    result.grid.assign((size_t)N * N, 0.0f);
-    CUDA_CHECK(cudaMemcpy(result.grid.data(), dA, bytes, cudaMemcpyDeviceToHost));
 
-    if (dump && fname != nullptr) {
-        FILE* f = fopen(fname, "w");
-        if (f) {
-            for (int i = 0; i < N; i++) {
-                for (int j = 0; j < N; j++) {
-                    fprintf(f, "%f", result.grid[i * N + j]);
-                    if (j < N - 1) fprintf(f, ",");
-                }
-                fprintf(f, "\n");
-            }
-            fclose(f);
-        }
-    }
+    result.grid.assign((size_t)N * N, 0.0f);
+    nvtx_push("cudaMemcpy DtoH & Cleanup", 0xFF1ABC9C);
+    CUDA_CHECK(cudaMemcpy(result.grid.data(), dA, bytes, cudaMemcpyDeviceToHost));
 
     CUDA_CHECK(cudaEventDestroy(start));
     CUDA_CHECK(cudaEventDestroy(stop));
     CUDA_CHECK(cudaFree(d_A));
     CUDA_CHECK(cudaFree(d_B));
+    nvtx_pop();
 
+    nvtx_pop(); // End Solver mode range
     return result;
 }
 
 int main(int argc, char** argv)
 {
+    printf("==================================================================\n");
+    printf("NVIDIA Nsight Systems Profiling Target: 2D Heat Diffusion (CUDA)\n");
+    printf("==================================================================\n");
+
     int N = 256;
     float eps = 1e-4f;
-    long long maxIter = 2000000;
+    long long maxIter = 1000; // Default to 1000 for focused profiling traces
     float topT = 100.0f;
     float bottomT = 0.0f;
     float leftT = 75.0f;
@@ -242,23 +278,26 @@ int main(int argc, char** argv)
     if (argc > 7) rightT = (float)atof(argv[7]);
     if (argc > 8) initTemp = (float)atof(argv[8]);
 
-    if (N < 3) {
-        fprintf(stderr, "N must be at least 3\n");
-        return 1;
-    }
+    printf("Configuration:\n");
+    printf("  - Grid Dimensions      : %d x %d (%zu elements)\n", N, N, (size_t)N * N);
+    printf("  - Convergence Tolerance: %e\n", eps);
+    printf("  - Max Iterations       : %lld\n", maxIter);
+    printf("  - Block Size           : %dx%d (256 threads/block)\n", BLOCK, BLOCK);
+    printf("  - NVTX Markers         : ENABLED (Colored timeline ranges)\n\n");
 
-    char fnameGlobal[256];
-    char fnameShared[256];
-    snprintf(fnameGlobal, sizeof(fnameGlobal), "grid_global_%d.csv", N);
-    snprintf(fnameShared, sizeof(fnameShared), "grid_shared_%d.csv", N);
+    nvtx_push("Whole Benchmark Run", 0xFF2C3E50);
 
-    SimResult rG = runSimulation(N, eps, maxIter, GLOBAL_MODE, topT, bottomT, leftT, rightT, initTemp, true, fnameGlobal);
-    SimResult rS = runSimulation(N, eps, maxIter, SHARED_MODE, topT, bottomT, leftT, rightT, initTemp, true, fnameShared);
+    printf("-> Running 1/2: Global Memory Kernel...\n");
+    SimResult rG = runSimulation(N, eps, maxIter, GLOBAL_MODE, topT, bottomT, leftT, rightT, initTemp);
+    printf("   Global Memory: %lld iters, %.3f ms (Converged: %s, Max Diff: %e)\n\n",
+           rG.iterations, rG.time_ms, rG.converged ? "YES" : "NO", rG.final_max_diff);
 
-    printf("RESULT_CSV\n");
-    printf("N,mode,iterations,time_ms,converged,final_max_diff\n");
-    printf("%d,global,%lld,%f,%d,%e\n", N, rG.iterations, rG.time_ms, rG.converged ? 1 : 0, rG.final_max_diff);
-    printf("%d,shared,%lld,%f,%d,%e\n", N, rS.iterations, rS.time_ms, rS.converged ? 1 : 0, rS.final_max_diff);
+    printf("-> Running 2/2: Shared Memory Tiled Kernel...\n");
+    SimResult rS = runSimulation(N, eps, maxIter, SHARED_MODE, topT, bottomT, leftT, rightT, initTemp);
+    printf("   Shared Memory: %lld iters, %.3f ms (Converged: %s, Max Diff: %e)\n\n",
+           rS.iterations, rS.time_ms, rS.converged ? "YES" : "NO", rS.final_max_diff);
+
+    nvtx_pop(); // End Whole Benchmark Run
 
     float maxDiff = 0.0f;
     for (size_t i = 0; i < rG.grid.size(); i++) {
@@ -266,9 +305,10 @@ int main(int argc, char** argv)
         if (d > maxDiff) maxDiff = d;
     }
 
-    printf("CORRECTNESS_CSV\n");
-    printf("N,max_diff_global_vs_shared\n");
-    printf("%d,%e\n", N, maxDiff);
+    printf("==================================================================\n");
+    printf("Correctness Check: Max absolute diff between Global & Shared = %e\n", maxDiff);
+    printf("Speedup Ratio (Global / Shared): %.4fx\n", rG.time_ms / rS.time_ms);
+    printf("==================================================================\n");
 
     return 0;
 }
