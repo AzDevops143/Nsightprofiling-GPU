@@ -26,6 +26,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Log in to NVIDIA NGC
+        env:
+          NGC_API_KEY: ${{ secrets.NGC_API_KEY }}
+        run: |
+          if [[ -n "$NGC_API_KEY" ]]; then
+            printf '%s' "$NGC_API_KEY" | docker login nvcr.io \
+              --username '$oauthtoken' --password-stdin
+          else
+            echo "NGC_API_KEY is not configured; trying anonymous access to public NGC images."
+          fi
+
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -42,7 +53,8 @@ jobs:
       - name: Verify Container & Nsight Systems CLI
         run: |
           echo "Verifying Nsight Systems CLI inside container..."
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --version || true
+          docker run --rm --entrypoint nsys \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --version
 
       - name: Run Profiling (or verify runner capability)
         run: |
@@ -52,9 +64,10 @@ jobs:
             docker run --gpus all --privileged --ipc=host --rm \
               -v $(pwd)/reports:/reports \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 256 1e-4 1000
+
           else
             echo "Standard runner without physical GPU detected."
-            echo "Baseline profiling reports and reference trace files are packaged in repository."
+            echo "Only committed profiler reports can be uploaded without a GPU runner."
           fi
 
           echo "Listing reports directory:"
@@ -63,8 +76,11 @@ jobs:
       - name: Upload Nsight Profiling Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nsight-systems-profiling-reports
-          path: reports/
+          name: nsight-systems-and-compute-reports
+          path: |
+            reports/*.nsys-rep
+            reports/*.ncu-rep
+          if-no-files-found: error
           retention-days: 30
 
       - name: Push Container to GHCR
